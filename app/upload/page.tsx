@@ -3,42 +3,40 @@
 import { useEffect, useState } from "react";
 import axiosInstance from "../../lib/axiosinstance";
 
-export default function UploadPage() {
+interface Channel {
+  _id: string;
+  userId: string;
+  channelName: string;
+  profilePic: string;
+}
 
+export default function UploadPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [duration, setDuration] = useState("");
 
-  const [channel, setChannel] = useState(null);
+  const [channel, setChannel] = useState<Channel | null>(null);
 
   useEffect(() => {
     getChannel();
   }, []);
 
   const getChannel = async () => {
-
     try {
-
       const response = await axiosInstance.get(
         "/channel/user/123456"
       );
 
       setChannel(response.data.result);
-
     } catch (error) {
-
       console.log(error);
-
       alert("Create a channel first.");
-
     }
-
   };
 
   const uploadVideo = async () => {
-
     if (
       !title ||
       !description ||
@@ -46,45 +44,29 @@ export default function UploadPage() {
       !videoUrl ||
       !duration
     ) {
-
       alert("Please fill all fields.");
-
       return;
-
     }
 
     if (!channel) {
-
       alert("Channel not found.");
-
       return;
-
     }
 
     try {
+      await axiosInstance.post("/video/create", {
+        title,
+        description,
+        thumbnailUrl,
+        videoUrl,
+        duration,
 
-      await axiosInstance.post(
-        "/video/create",
-        {
+        // ✅ Fixed
+        channelId: channel._id,
 
-          title,
-
-          description,
-
-          thumbnailUrl,
-
-          videoUrl,
-
-          duration,
-
-          channelId: channel.userId,
-
-          channelName: channel.channelName,
-
-          channelAvatar: channel.profilePic,
-
-        }
-      );
+        channelName: channel.channelName,
+        channelAvatar: channel.profilePic,
+      });
 
       alert("Video Uploaded Successfully");
 
@@ -95,16 +77,12 @@ export default function UploadPage() {
       setDuration("");
 
     } catch (error) {
-
       console.log(error);
-
       alert("Upload Failed");
-
     }
-
   };
-    return (
 
+  return (
     <div className="max-w-4xl mx-auto p-8">
 
       <h1 className="text-3xl font-bold mb-8">
@@ -117,18 +95,14 @@ export default function UploadPage() {
           type="text"
           placeholder="Video Title"
           value={title}
-          onChange={(e) =>
-            setTitle(e.target.value)
-          }
+          onChange={(e) => setTitle(e.target.value)}
           className="w-full border rounded-lg p-3"
         />
 
         <textarea
           placeholder="Video Description"
           value={description}
-          onChange={(e) =>
-            setDescription(e.target.value)
-          }
+          onChange={(e) => setDescription(e.target.value)}
           className="w-full border rounded-lg p-3"
           rows={5}
         />
@@ -137,9 +111,7 @@ export default function UploadPage() {
           type="text"
           placeholder="Thumbnail URL"
           value={thumbnailUrl}
-          onChange={(e) =>
-            setThumbnailUrl(e.target.value)
-          }
+          onChange={(e) => setThumbnailUrl(e.target.value)}
           className="w-full border rounded-lg p-3"
         />
 
@@ -155,9 +127,7 @@ export default function UploadPage() {
           type="text"
           placeholder="Video URL"
           value={videoUrl}
-          onChange={(e) =>
-            setVideoUrl(e.target.value)
-          }
+          onChange={(e) => setVideoUrl(e.target.value)}
           className="w-full border rounded-lg p-3"
         />
 
@@ -165,9 +135,7 @@ export default function UploadPage() {
           type="text"
           placeholder="Duration (10:35)"
           value={duration}
-          onChange={(e) =>
-            setDuration(e.target.value)
-          }
+          onChange={(e) => setDuration(e.target.value)}
           className="w-full border rounded-lg p-3"
         />
 
@@ -181,7 +149,5 @@ export default function UploadPage() {
       </div>
 
     </div>
-
   );
-
 }
