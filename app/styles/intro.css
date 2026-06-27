@@ -1,0 +1,158 @@
+/* Background Animation */
+.intro-bg {
+  background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+  overflow: hidden;
+}
+
+/* Snowflake Glow */
+.snowflake-glow {
+  filter: drop-shadow(0 0 15px #38bdf8)
+          drop-shadow(0 0 30px #38bdf8)
+          drop-shadow(0 0 60px #0ea5e9);
+}
+
+/* Motivation Text */
+.intro-title {
+
+  font-size: 42px;
+
+  font-weight: 700;
+
+  color: white;
+
+  text-align: center;
+
+  letter-spacing: 1px;
+
+  text-shadow:
+      0 0 10px #38bdf8,
+      0 0 20px #38bdf8;
+
+}
+
+.intro-title span{
+
+  color:#7dd3fc;
+
+}
+
+/* Loading */
+
+.loading-text{
+
+  margin-top:40px;
+
+  color:#d1d5db;
+
+  letter-spacing:8px;
+
+  text-transform:uppercase;
+
+  font-size:14px;
+
+}
+
+/* Loading Bar */
+
+.loading-bar{
+
+  width:300px;
+
+  height:10px;
+
+  margin-top:16px;
+
+  border-radius:20px;
+
+  overflow:hidden;
+
+  background:#1e293b;
+
+  box-shadow:0 0 20px rgba(56,189,248,.25);
+
+}
+
+.loading-fill{
+
+  height:100%;
+
+  border-radius:20px;
+
+  background:linear-gradient(
+      90deg,
+      #38bdf8,
+      #7dd3fc,
+      #38bdf8
+  );
+
+}
+
+/* Floating particles */
+
+.float-particle{
+
+  position:absolute;
+
+  border-radius:50%;
+
+  background:#7dd3fc;
+
+  opacity:.3;
+
+  animation:float 8s linear infinite;
+
+}
+
+@keyframes float{
+
+  from{
+
+      transform:translateY(0);
+
+      opacity:0;
+
+  }
+
+  30%{
+
+      opacity:1;
+
+  }
+
+  to{
+
+      transform:translateY(-350px);
+
+      opacity:0;
+
+  }
+
+}
+
+/* Fade */
+
+.fade-home{
+
+  animation:fadeHome .8s ease;
+
+}
+
+@keyframes fadeHome{
+
+  from{
+
+      opacity:0;
+
+      transform:scale(1.02);
+
+  }
+
+  to{
+
+      opacity:1;
+
+      transform:scale(1);
+
+  }
+
+}
