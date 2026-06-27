@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import axiosInstance from "../../lib/axiosinstance";
 
 export default function ChannelInfo() {
-  const [channel, setChannel] = useState(null);
+ const [channel, setChannel] = useState<any>(null);
 
   useEffect(() => {
     getChannel();
