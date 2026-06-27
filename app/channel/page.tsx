@@ -8,7 +8,7 @@ export default function ChannelPage() {
 
   const USER_ID = "123456";
 
- const [channel, setChannel] = useState<any>(null);;
+ const [channel, setChannel] = useState<any>(null);
  const [videos, setVideos] = useState<any[]>([]);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
