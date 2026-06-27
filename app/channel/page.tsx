@@ -8,8 +8,8 @@ export default function ChannelPage() {
 
   const USER_ID = "123456";
 
-  const [channel, setChannel] = useState(null);
-  const [videos, setVideos] = useState([]);
+ const [channel, setChannel] = useState<any>(null);;
+ const [videos, setVideos] = useState<any[]>([]);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function ChannelPage() {
 
           <div className="grid grid-cols-3 gap-6">
 
-            {videos.map((video) => (
+            {videos.map((video: any) => (
 
               <VideoCard
                 key={video._id}
