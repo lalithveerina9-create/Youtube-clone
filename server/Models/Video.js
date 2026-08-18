@@ -21,6 +21,11 @@ const videoSchema = new mongoose.Schema({
     default: "",
   },
 
+  isPremium: {
+  type: Boolean,
+  default: false,
+},
+
   channelId: {
     type: String,
     required: true,
@@ -57,7 +62,7 @@ const videoSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-
+  
   // NEW - Duration
   duration: {
     type: String,

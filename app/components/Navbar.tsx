@@ -12,35 +12,41 @@ import {
   Search,
   Bell,
   Upload,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import { useUser } from "@/lib/AuthContext";
 
 export default function Navbar() {
-
   const {
     user,
     logout,
     handlegooglesignin,
+    changeTheme,
   } = useUser();
 
   const router = useRouter();
 
-  const [searchText, setSearchText] =
-    useState("");
+  const [searchText, setSearchText] = useState("");
 
+  // ==========================
+  // SEARCH
+  // ==========================
   const handleSearch = () => {
-
     if (!searchText.trim()) return;
 
-    router.push(`/search?q=${searchText}`);
+    router.push(
+      `/search?q=${encodeURIComponent(searchText.trim())}`
+    );
   };
 
   return (
+    <nav className="flex justify-between items-center px-6 py-4 border-b bg-background text-foreground sticky top-0 z-50">
 
-    <nav className="flex justify-between items-center px-6 py-4 border-b bg-white sticky top-0 z-50">
-
-      {/* Left */}
+      {/* ===================== */}
+      {/* LEFT */}
+      {/* ===================== */}
 
       <div className="flex items-center gap-5">
 
@@ -54,7 +60,10 @@ export default function Navbar() {
 
       </div>
 
-      {/* Search */}
+
+      {/* ===================== */}
+      {/* SEARCH */}
+      {/* ===================== */}
 
       <div className="flex w-[45%]">
 
@@ -80,9 +89,49 @@ export default function Navbar() {
 
       </div>
 
-      {/* Right */}
+
+      {/* ===================== */}
+      {/* RIGHT */}
+      {/* ===================== */}
 
       <div className="flex items-center gap-5">
+
+        {/* MANUAL THEME SWITCH */}
+
+        {user && (
+          <Button
+            variant="outline"
+            onClick={() =>
+              changeTheme(
+                user.theme === "dark"
+                  ? "light"
+                  : "dark"
+              )
+            }
+            title={
+              user.theme === "dark"
+                ? "Switch to Light Mode"
+                : "Switch to Dark Mode"
+            }
+          >
+
+            {user.theme === "dark" ? (
+              <>
+                <Sun className="w-4 h-4 mr-2" />
+                Light
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 mr-2" />
+                Dark
+              </>
+            )}
+
+          </Button>
+        )}
+
+
+        {/* UPLOAD */}
 
         <Link href="/upload">
 
@@ -96,20 +145,29 @@ export default function Navbar() {
 
         </Link>
 
+
+        {/* NOTIFICATIONS */}
+
         <Bell className="cursor-pointer" />
 
-        {user ? (
 
+        {/* USER */}
+
+        {user ? (
           <>
 
-            <img
-              src={
-                user.image ||
-                "/avatar/default-avatar.png"
-              }
-              alt="User"
-              className="w-10 h-10 rounded-full object-cover border"
-            />
+            <Link href="/profile">
+
+              <img
+                src={
+                  user.image ||
+                  "/avatar/default-avatar.png"
+                }
+                alt="User"
+                className="w-10 h-10 rounded-full object-cover border cursor-pointer"
+              />
+
+            </Link>
 
             <span className="font-medium">
               {user.name}
@@ -123,7 +181,6 @@ export default function Navbar() {
             </Button>
 
           </>
-
         ) : (
 
           <Button
@@ -137,7 +194,5 @@ export default function Navbar() {
       </div>
 
     </nav>
-
   );
-
 }

@@ -35,7 +35,7 @@ export default function Sidebar() {
               href={item.path}
               key={item.label}
             >
-              <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 cursor-pointer">
+              <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-700 cursor-pointer select-none">
                 <Icon className="w-5 h-5" />
                 <span>{item.label}</span>
               </div>

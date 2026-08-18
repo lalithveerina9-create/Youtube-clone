@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import Navbar from "../components/Navbar";
-import Sidebar from "../components/Navbar";
+import Sidebar from "../components/Sidebar";
 import VideoCard from "../components/VideoCard";
 
 import axiosInstance from "../../lib/axiosinstance";
