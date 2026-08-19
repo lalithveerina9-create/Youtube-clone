@@ -31,7 +31,7 @@ router.post("/create", async (req, res) => {
     res.status(201).json({
       success: true,
       room,
-      inviteLink: `http://localhost:3000/watch-party/${roomId}`,
+     inviteLink: `${process.env.FRONTEND_URL}/watch-party/${roomId}`,
     });
   } catch (error) {
     res.status(500).json({
