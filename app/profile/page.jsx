@@ -10,9 +10,13 @@ export default function ProfilePage() {
   const { user } = useUser();
 
   const [downloads, setDownloads] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?._id) {
+      setLoading(false);
+      return;
+    }
 
     const fetchDownloads = async () => {
       try {
@@ -21,15 +25,21 @@ export default function ProfilePage() {
         );
 
         if (response.data.success) {
-          setDownloads(response.data.downloads);
+          setDownloads(response.data.downloads || []);
         }
       } catch (error) {
         console.error("Error fetching downloads:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchDownloads();
   }, [user]);
+
+  const validDownloads = downloads.filter(
+    (download) => download && download.video
+  );
 
   return (
     <div className="max-w-5xl mx-auto p-8">
@@ -43,23 +53,45 @@ export default function ProfilePage() {
       <div className="bg-white shadow-md rounded-xl p-6 flex items-center gap-6">
 
         <img
-          src={user?.image || "/avatar/default-avatar.png"}
+          src={
+            user?.image ||
+            "/avatar/default-avatar.png"
+          }
           alt="Profile"
           className="w-24 h-24 rounded-full border object-cover"
         />
 
         <div>
+
           <h2 className="text-2xl font-semibold">
-            {user?.name}
+            {user?.name || "User"}
           </h2>
 
           <p className="text-gray-600">
-            {user?.email}
+            {user?.email || ""}
           </p>
 
-          <p className="text-gray-500">
-            Plan : {user?.userPlan}
-          </p>
+          {/* Subscription */}
+          <div className="mt-2 flex items-center gap-2">
+
+            <span className="text-gray-500">
+              Subscription:
+            </span>
+
+            <span className="font-semibold text-red-600">
+              {user?.userPlan || "Free"}
+            </span>
+
+          </div>
+
+          {/* Manage Subscription */}
+          <Link
+            href="/subscription"
+            className="inline-block mt-3 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition"
+          >
+            Manage Subscription
+          </Link>
+
         </div>
 
       </div>
@@ -67,43 +99,52 @@ export default function ProfilePage() {
       {/* Profile Options */}
       <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        {/* Downloads */}
+        {/* DOWNLOADS */}
         <div className="border rounded-lg p-6">
 
           <h2 className="text-xl font-semibold mb-4">
             📥 Downloads
           </h2>
 
-          {downloads.length > 0 ? (
+          {loading ? (
 
-            downloads.map((download) => (
+            <p className="text-gray-500">
+              Loading downloads...
+            </p>
+
+          ) : validDownloads.length > 0 ? (
+
+            validDownloads.map((download) => (
 
               <Link
                 key={download._id}
                 href={`/watch/${download.video._id}`}
+                className="block mb-4"
               >
 
-                <div className="flex gap-4 border-b py-4 cursor-pointer hover:bg-gray-100 transition">
+                <div className="flex items-center gap-3">
 
                   <img
-                    src={download.video.thumbnail}
-                    alt={download.video.title}
-                    className="w-40 h-24 rounded object-cover"
+                    src={
+                      download.video.thumbnailUrl ||
+                      "/thumbnail/default-thumbnail.jpg"
+                    }
+                    alt={
+                      download.video.title ||
+                      "Video"
+                    }
+                    className="w-24 h-14 object-cover rounded"
                   />
 
-                  <div>
+                  <div className="min-w-0">
 
-                    <h3 className="font-semibold text-lg">
-                      {download.video.title}
-                    </h3>
-
-                    <p className="text-gray-600">
-                      {download.video.channel}
+                    <p className="font-medium truncate">
+                      {download.video.title ||
+                        "Untitled Video"}
                     </p>
 
-                    <p className="text-sm text-gray-500">
-                      Downloaded:{" "}
-                      {new Date(download.createdAt).toLocaleDateString()}
+                    <p className="text-sm text-gray-500 truncate">
+                      {download.video.channelName || ""}
                     </p>
 
                   </div>
@@ -116,25 +157,42 @@ export default function ProfilePage() {
 
           ) : (
 
-            <p className="text-gray-500 text-center py-6">
-              No downloads available.
+            <p className="text-gray-500">
+              No downloaded videos yet.
             </p>
 
           )}
 
         </div>
 
-        {/* Liked Videos */}
-
+        {/* LIKED VIDEOS */}
         <div className="border rounded-lg p-6 cursor-pointer hover:bg-gray-100 transition">
-          ❤️ Liked Videos
+
+          <h2 className="text-xl font-semibold mb-2">
+            ❤️ Liked Videos
+          </h2>
+
+          <p className="text-gray-500">
+            View your liked videos
+          </p>
+
         </div>
 
-        {/* Watch Later */}
+        {/* WATCH LATER */}
+        <Link
+          href="/watchlater"
+          className="border rounded-lg p-6 cursor-pointer hover:bg-gray-100 transition"
+        >
 
-        <div className="border rounded-lg p-6 cursor-pointer hover:bg-gray-100 transition">
-          🕒 Watch Later
-        </div>
+          <h2 className="text-xl font-semibold mb-2">
+            🕒 Watch Later
+          </h2>
+
+          <p className="text-gray-500">
+            View videos saved for later
+          </p>
+
+        </Link>
 
       </div>
 

@@ -7,47 +7,58 @@ import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 
 import axiosInstance from "../../lib/axiosinstance";
+import { useUser } from "../../lib/AuthContext";
 
 export default function HistoryPage() {
+  const { user } = useUser();
 
   const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getHistory();
-  }, []);
-
-  const getHistory = async () => {
-
-    try {
-
-      const response = await axiosInstance.get(
-        "/history/123456"
-      );
-
-      // Remove null videos
-      const historyVideos = response.data.result
-        .map((item) => item.videoId)
-        .filter((video) => video);
-
-      // Remove duplicate videos
-      const uniqueVideos = Array.from(
-        new Map(
-          historyVideos.map((video) => [video._id, video])
-        ).values()
-      );
-
-      setVideos(uniqueVideos);
-
-    } catch (error) {
-
-      console.log(error);
-
+    if (!user?._id) {
+      setLoading(false);
+      return;
     }
 
+    getHistory();
+  }, [user]);
+
+  const getHistory = async () => {
+    try {
+      setLoading(true);
+
+      const response = await axiosInstance.get(
+        `/history/${user._id}`
+      );
+
+      if (response.data.success) {
+        // Get videos from history
+        const historyVideos = (response.data.result || [])
+          .map((item) => item.videoId)
+          .filter((video) => video);
+
+        // Remove duplicate videos
+        const uniqueVideos = Array.from(
+          new Map(
+            historyVideos.map((video) => [
+              video._id,
+              video,
+            ])
+          ).values()
+        );
+
+        setVideos(uniqueVideos);
+      }
+    } catch (error) {
+      console.error("Error fetching history:", error);
+      setVideos([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-
     <>
       <Navbar />
 
@@ -61,8 +72,20 @@ export default function HistoryPage() {
             Watch History
           </h1>
 
-          {videos.length === 0 ? (
+          {/* Loading */}
+          {loading ? (
 
+            <div className="text-center mt-20">
+
+              <p className="text-gray-500">
+                Loading history...
+              </p>
+
+            </div>
+
+          ) : videos.length === 0 ? (
+
+            /* No History */
             <div className="text-center mt-20">
 
               <h2 className="text-2xl font-semibold">
@@ -77,6 +100,7 @@ export default function HistoryPage() {
 
           ) : (
 
+            /* History Videos */
             <div className="space-y-6">
 
               {videos.map((video) => (
@@ -84,35 +108,38 @@ export default function HistoryPage() {
                 <Link
                   key={video._id}
                   href={`/watch/${video._id}`}
+                  className="block"
                 >
 
                   <div className="flex gap-5 border rounded-xl p-4 hover:bg-gray-100 transition cursor-pointer">
 
+                    {/* Thumbnail */}
                     <img
                       src={
                         video.thumbnailUrl ||
                         "/thumbnails/default.jpg"
                       }
-                      alt={video.title}
+                      alt={video.title || "Video"}
                       className="w-72 h-40 rounded-xl object-cover"
                     />
 
+                    {/* Video Details */}
                     <div className="flex-1">
 
                       <h2 className="text-2xl font-bold">
-                        {video.title}
+                        {video.title || "Untitled Video"}
                       </h2>
 
                       <p className="text-gray-500 mt-2">
-                        {video.channelName}
+                        {video.channelName || ""}
                       </p>
 
                       <p className="text-gray-500">
-                        👀 {video.views} views
+                        👀 {video.views || 0} views
                       </p>
 
                       <p className="mt-4 text-gray-700 line-clamp-3">
-                        {video.description}
+                        {video.description || ""}
                       </p>
 
                     </div>
@@ -130,9 +157,6 @@ export default function HistoryPage() {
         </main>
 
       </div>
-
     </>
-
   );
-
 }

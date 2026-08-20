@@ -65,12 +65,11 @@ export default function WatchPage() {
   // ==========================
 
   useEffect(() => {
-
-    if (!id) return;
+if (!id || !user?._id) return;
 
     loadPage();
 
-  }, [id]);
+  }, [id, user?._id]);
 
   // ==========================
   // AD LOGIC
@@ -272,10 +271,9 @@ const getRecommendedVideos = async () => {
 // ==========================
 // ADD TO HISTORY
 // ==========================
-
 const addToHistory = async () => {
 
-  if (!user) return;
+  if (!user?._id || !id) return;
 
   try {
 
@@ -289,44 +287,37 @@ const addToHistory = async () => {
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      "Error adding video to history:",
+      error
+    );
 
   }
 
 };
-// ==========================
-// LIKE VIDEO
-// ==========================
 
+// ==========================
+//LIKED VIDEOS//
 const handleVideoLike = async () => {
-
-  if (!user) {
+  if (!user?._id) {
     alert("Please login first.");
     return;
   }
 
   try {
-
     await axiosInstance.post("/likedvideo/add", {
       userId: user._id,
       videoId: id,
     });
 
-    await axiosInstance.post(`/video/like/${id}`);
-
-    getVideo();
+    await getVideo();
 
     alert("Video Liked Successfully");
-
   } catch (error) {
-
-    console.error(error);
+    console.error("Failed to like video:", error);
     alert("Failed to Like Video");
-
   }
-
 };
-
 // ==========================
 // DISLIKE VIDEO
 // ==========================
