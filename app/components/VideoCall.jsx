@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +11,9 @@ export default function VideoCall({ roomId }) {
   const peerConnection = useRef(null);
   const localStream = useRef(null);
 
+  // Store ICE candidates that arrive before remote description
+  const pendingIceCandidates = useRef([]);
+
   // Recording
   const mediaRecorder = useRef(null);
   const recordedChunks = useRef([]);
@@ -20,231 +24,535 @@ export default function VideoCall({ roomId }) {
   const [screenSharing, setScreenSharing] = useState(false);
   const [recording, setRecording] = useState(false);
 
-  // ==========================
-  // START CAMERA
-  // ==========================
+  // ============================================================
+  // CREATE PEER CONNECTION
+  // ============================================================
+
+  const createPeerConnection = () => {
+    // If connection already exists, return it
+    if (peerConnection.current) {
+      return peerConnection.current;
+    }
+
+    console.log("🔗 Creating new WebRTC peer connection");
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        {
+          urls: "stun:stun.l.google.com:19302",
+        },
+      ],
+    });
+
+    peerConnection.current = pc;
+
+    // ==========================================================
+    // REMOTE STREAM
+    // ==========================================================
+
+    pc.ontrack = (event) => {
+      console.log("📥 REMOTE TRACK RECEIVED");
+
+      console.log("Remote streams:", event.streams);
+
+      if (!event.streams || event.streams.length === 0) {
+        console.warn("⚠️ Remote track received without stream");
+        return;
+      }
+
+      const remoteStream = event.streams[0];
+
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+
+        console.log("✅ Remote stream attached to video element");
+
+        remoteVideoRef.current
+          .play()
+          .then(() => {
+            console.log("▶️ Remote video started playing");
+          })
+          .catch((error) => {
+            console.error(
+              "❌ Remote video play error:",
+              error
+            );
+          });
+
+        setConnected(true);
+      }
+    };
+
+    // ==========================================================
+    // ICE CANDIDATES
+    // ==========================================================
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log("🧊 Sending ICE candidate");
+
+        socket.emit("webrtc-ice-candidate", {
+          roomId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    // ==========================================================
+    // CONNECTION STATE
+    // ==========================================================
+
+    pc.onconnectionstatechange = () => {
+      console.log(
+        "🔗 WebRTC connection state:",
+        pc.connectionState
+      );
+
+      if (pc.connectionState === "connected") {
+        console.log("✅ WebRTC connection established");
+        setConnected(true);
+      }
+
+      if (
+        pc.connectionState === "failed" ||
+        pc.connectionState === "disconnected" ||
+        pc.connectionState === "closed"
+      ) {
+        console.log(
+          "❌ WebRTC connection lost:",
+          pc.connectionState
+        );
+
+        setConnected(false);
+      }
+    };
+
+    // ==========================================================
+    // ICE CONNECTION STATE
+    // ==========================================================
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(
+        "🧊 ICE connection state:",
+        pc.iceConnectionState
+      );
+    };
+
+    // ==========================================================
+    // ICE GATHERING STATE
+    // ==========================================================
+
+    pc.onicegatheringstatechange = () => {
+      console.log(
+        "🧊 ICE gathering state:",
+        pc.iceGatheringState
+      );
+    };
+
+    return pc;
+  };
+
+  // ============================================================
+  // ADD LOCAL TRACKS TO PEER CONNECTION
+  // ============================================================
+
+  const addLocalTracks = (pc, stream) => {
+    if (!pc || !stream) {
+      console.warn(
+        "⚠️ Cannot add local tracks: missing peer connection or stream"
+      );
+      return;
+    }
+
+    const existingSenders = pc.getSenders();
+
+    stream.getTracks().forEach((track) => {
+      // Prevent duplicate tracks
+      const alreadyAdded = existingSenders.some(
+        (sender) =>
+          sender.track &&
+          sender.track.id === track.id
+      );
+
+      if (!alreadyAdded) {
+        console.log(
+          "➕ Adding local track:",
+          track.kind
+        );
+
+        pc.addTrack(track, stream);
+      }
+    });
+  };
+
+  // ============================================================
+  // START CAMERA / JOIN VIDEO CALL
+  // ============================================================
 
   const startCamera = async () => {
     try {
+      console.log("📹 Requesting camera and microphone...");
+
       const stream =
         await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         });
 
+      console.log("✅ Camera and microphone access granted");
+
       localStream.current = stream;
 
+      // Show local video
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+
+        try {
+          await localVideoRef.current.play();
+        } catch (error) {
+          console.warn(
+            "Local video autoplay warning:",
+            error
+          );
+        }
       }
 
       setCameraOn(true);
       setMicOn(true);
 
-      createPeerConnection();
+      // --------------------------------------------------------
+      // IMPORTANT:
+      // Create peer connection AFTER camera is available
+      // --------------------------------------------------------
+
+      const pc = createPeerConnection();
+
+      // Add camera + microphone tracks
+      addLocalTracks(pc, stream);
+
+      // --------------------------------------------------------
+      // NOW join the signaling room
+      // --------------------------------------------------------
+
+      if (!socket.connected) {
+        console.log("🔌 Socket not connected. Connecting...");
+        socket.connect();
+      }
+
+      socket.emit("join-video-call", {
+        roomId,
+      });
+
+      console.log(
+        "✅ Joined video call room:",
+        roomId
+      );
     } catch (error) {
       console.error(
-        "Camera/Microphone error:",
+        "❌ Camera/Microphone error:",
         error
+      );
+
+      alert(
+        "Unable to access camera or microphone. Please allow camera and microphone permissions."
       );
     }
   };
 
-  // ==========================
-  // CREATE PEER CONNECTION
-  // ==========================
-
-  const createPeerConnection = () => {
-    if (peerConnection.current) {
-      return peerConnection.current;
-    }
-
-    const pc =
-      new RTCPeerConnection({
-        iceServers: [
-          {
-            urls: "stun:stun.l.google.com:19302",
-          },
-        ],
-      });
-
-    peerConnection.current = pc;
-
-    // ==========================
-    // ADD LOCAL TRACKS
-    // ==========================
-
-    if (localStream.current) {
-      localStream.current
-        .getTracks()
-        .forEach((track) => {
-          pc.addTrack(
-            track,
-            localStream.current
-          );
-        });
-    }
-
-    // ==========================
-    // REMOTE STREAM
-    // ==========================
-
-    pc.ontrack = (event) => {
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject =
-          event.streams[0];
-
-        setConnected(true);
-      }
-    };
-
-    // ==========================
-    // ICE CANDIDATES
-    // ==========================
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit(
-          "webrtc-ice-candidate",
-          {
-            roomId,
-            candidate: event.candidate,
-          }
-        );
-      }
-    };
-
-    return pc;
-  };
-
-  // ==========================
+  // ============================================================
   // SOCKET SIGNALING
-  // ==========================
+  // ============================================================
 
   useEffect(() => {
     if (!roomId) return;
+
+    console.log(
+      "🎥 Setting up video call for room:",
+      roomId
+    );
 
     if (!socket.connected) {
       socket.connect();
     }
 
-    socket.emit(
-      "join-video-call",
-      {
-        roomId,
-      }
-    );
-
-    // ==========================
+    // ==========================================================
     // USER JOINED
-    // ==========================
+    // ==========================================================
 
     const handleUserJoined = async () => {
-      console.log(
-        "📹 Another user joined video call"
-      );
+      try {
+        console.log(
+          "📹 Another user joined video call"
+        );
 
-      const pc =
-        createPeerConnection();
+        // Make sure local camera exists
+        if (!localStream.current) {
+          console.warn(
+            "⚠️ Local stream not available yet"
+          );
+          return;
+        }
 
-      const offer =
-        await pc.createOffer();
+        const pc = createPeerConnection();
 
-      await pc.setLocalDescription(
-        offer
-      );
+        // Make absolutely sure tracks exist
+        addLocalTracks(
+          pc,
+          localStream.current
+        );
 
-      socket.emit(
-        "webrtc-offer",
-        {
+        console.log("📤 Creating WebRTC offer...");
+
+        const offer =
+          await pc.createOffer();
+
+        await pc.setLocalDescription(
+          offer
+        );
+
+        console.log(
+          "📤 Sending WebRTC offer"
+        );
+
+        socket.emit("webrtc-offer", {
           roomId,
           offer,
-        }
-      );
-    };
-
-    // ==========================
-    // RECEIVE OFFER
-    // ==========================
-
-    const handleOffer = async ({
-      offer,
-    }) => {
-      console.log(
-        "📥 WebRTC offer received"
-      );
-
-      const pc =
-        createPeerConnection();
-
-      await pc.setRemoteDescription(
-        new RTCSessionDescription(offer)
-      );
-
-      const answer =
-        await pc.createAnswer();
-
-      await pc.setLocalDescription(
-        answer
-      );
-
-      socket.emit(
-        "webrtc-answer",
-        {
-          roomId,
-          answer,
-        }
-      );
-    };
-
-    // ==========================
-    // RECEIVE ANSWER
-    // ==========================
-
-    const handleAnswer = async ({
-      answer,
-    }) => {
-      console.log(
-        "📥 WebRTC answer received"
-      );
-
-      const pc =
-        peerConnection.current;
-
-      if (!pc) return;
-
-      await pc.setRemoteDescription(
-        new RTCSessionDescription(answer)
-      );
-    };
-
-    // ==========================
-    // ICE CANDIDATE
-    // ==========================
-
-    const handleIceCandidate = async ({
-      candidate,
-    }) => {
-      const pc =
-        peerConnection.current;
-
-      if (!pc) return;
-
-      try {
-        await pc.addIceCandidate(
-          new RTCIceCandidate(candidate)
-        );
+        });
       } catch (error) {
         console.error(
-          "ICE candidate error:",
+          "❌ Error creating offer:",
           error
         );
       }
     };
 
-    // ==========================
+    // ==========================================================
+    // RECEIVE OFFER
+    // ==========================================================
+
+    const handleOffer = async ({
+      offer,
+    }) => {
+      try {
+        console.log(
+          "📥 WebRTC offer received"
+        );
+
+        if (!localStream.current) {
+          console.warn(
+            "⚠️ Local stream not available while receiving offer"
+          );
+          return;
+        }
+
+        const pc = createPeerConnection();
+
+        // Add local camera/microphone
+        addLocalTracks(
+          pc,
+          localStream.current
+        );
+
+        console.log(
+          "📥 Setting remote description..."
+        );
+
+        await pc.setRemoteDescription(
+          new RTCSessionDescription(
+            offer
+          )
+        );
+
+        // Add queued ICE candidates
+        if (
+          pendingIceCandidates.current
+            .length > 0
+        ) {
+          console.log(
+            "🧊 Adding queued ICE candidates:",
+            pendingIceCandidates.current
+              .length
+          );
+
+          for (const candidate of
+            pendingIceCandidates.current) {
+            try {
+              await pc.addIceCandidate(
+                candidate
+              );
+            } catch (error) {
+              console.error(
+                "❌ Error adding queued ICE candidate:",
+                error
+              );
+            }
+          }
+
+          pendingIceCandidates.current =
+            [];
+        }
+
+        console.log(
+          "📤 Creating WebRTC answer..."
+        );
+
+        const answer =
+          await pc.createAnswer();
+
+        await pc.setLocalDescription(
+          answer
+        );
+
+        console.log(
+          "📤 Sending WebRTC answer"
+        );
+
+        socket.emit("webrtc-answer", {
+          roomId,
+          answer,
+        });
+      } catch (error) {
+        console.error(
+          "❌ Error handling WebRTC offer:",
+          error
+        );
+      }
+    };
+
+    // ==========================================================
+    // RECEIVE ANSWER
+    // ==========================================================
+
+    const handleAnswer = async ({
+      answer,
+    }) => {
+      try {
+        console.log(
+          "📥 WebRTC answer received"
+        );
+
+        const pc =
+          peerConnection.current;
+
+        if (!pc) {
+          console.warn(
+            "⚠️ No peer connection available for answer"
+          );
+          return;
+        }
+
+        await pc.setRemoteDescription(
+          new RTCSessionDescription(
+            answer
+          )
+        );
+
+        console.log(
+          "✅ Remote answer set successfully"
+        );
+
+        // Add queued ICE candidates
+        if (
+          pendingIceCandidates.current
+            .length > 0
+        ) {
+          console.log(
+            "🧊 Adding queued ICE candidates:",
+            pendingIceCandidates.current
+              .length
+          );
+
+          for (const candidate of
+            pendingIceCandidates.current) {
+            try {
+              await pc.addIceCandidate(
+                candidate
+              );
+            } catch (error) {
+              console.error(
+                "❌ Error adding queued ICE candidate:",
+                error
+              );
+            }
+          }
+
+          pendingIceCandidates.current =
+            [];
+        }
+      } catch (error) {
+        console.error(
+          "❌ Error handling WebRTC answer:",
+          error
+        );
+      }
+    };
+
+    // ==========================================================
+    // RECEIVE ICE CANDIDATE
+    // ==========================================================
+
+    const handleIceCandidate = async ({
+      candidate,
+    }) => {
+      try {
+        console.log(
+          "📥 ICE candidate received"
+        );
+
+        if (!candidate) return;
+
+        const iceCandidate =
+          new RTCIceCandidate(
+            candidate
+          );
+
+        const pc =
+          peerConnection.current;
+
+        if (!pc) {
+          console.log(
+            "⏳ Peer connection not ready. Queueing ICE candidate."
+          );
+
+          pendingIceCandidates.current.push(
+            iceCandidate
+          );
+
+          return;
+        }
+
+        // Remote description must exist before
+        // adding ICE candidates
+        if (!pc.remoteDescription) {
+          console.log(
+            "⏳ Remote description not ready. Queueing ICE candidate."
+          );
+
+          pendingIceCandidates.current.push(
+            iceCandidate
+          );
+
+          return;
+        }
+
+        await pc.addIceCandidate(
+          iceCandidate
+        );
+
+        console.log(
+          "✅ ICE candidate added"
+        );
+      } catch (error) {
+        console.error(
+          "❌ ICE candidate error:",
+          error
+        );
+      }
+    };
+
+    // ==========================================================
     // PARTICIPANT LEFT
-    // ==========================
+    // ==========================================================
 
     const handleUserLeft = () => {
       console.log(
@@ -257,11 +565,14 @@ export default function VideoCall({ roomId }) {
       }
 
       setConnected(false);
+
+      pendingIceCandidates.current =
+        [];
     };
 
-    // ==========================
-    // SOCKET EVENTS
-    // ==========================
+    // ==========================================================
+    // REGISTER SOCKET EVENTS
+    // ==========================================================
 
     socket.on(
       "video-call-user-joined",
@@ -288,11 +599,15 @@ export default function VideoCall({ roomId }) {
       handleUserLeft
     );
 
-    // ==========================
+    // ==========================================================
     // CLEANUP
-    // ==========================
+    // ==========================================================
 
     return () => {
+      console.log(
+        "🧹 Cleaning up video call socket listeners"
+      );
+
       socket.off(
         "video-call-user-joined",
         handleUserJoined
@@ -320,9 +635,9 @@ export default function VideoCall({ roomId }) {
     };
   }, [roomId]);
 
-  // ==========================
+  // ============================================================
   // TOGGLE CAMERA
-  // ==========================
+  // ============================================================
 
   const toggleCamera = () => {
     if (!localStream.current) return;
@@ -338,11 +653,18 @@ export default function VideoCall({ roomId }) {
     setCameraOn(
       videoTrack.enabled
     );
+
+    console.log(
+      "📹 Camera:",
+      videoTrack.enabled
+        ? "ON"
+        : "OFF"
+    );
   };
 
-  // ==========================
+  // ============================================================
   // TOGGLE MICROPHONE
-  // ==========================
+  // ============================================================
 
   const toggleMic = () => {
     if (!localStream.current) return;
@@ -358,11 +680,18 @@ export default function VideoCall({ roomId }) {
     setMicOn(
       audioTrack.enabled
     );
+
+    console.log(
+      "🎤 Microphone:",
+      audioTrack.enabled
+        ? "ON"
+        : "OFF"
+    );
   };
 
-  // ==========================
+  // ============================================================
   // STOP SCREEN SHARE
-  // ==========================
+  // ============================================================
 
   const stopScreenShare = async () => {
     if (!peerConnection.current) {
@@ -383,7 +712,8 @@ export default function VideoCall({ roomId }) {
           .find(
             (sender) =>
               sender.track &&
-              sender.track.kind === "video"
+              sender.track.kind ===
+                "video"
           );
 
       if (sender && cameraTrack) {
@@ -395,31 +725,48 @@ export default function VideoCall({ roomId }) {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject =
           localStream.current;
+
+        try {
+          await localVideoRef.current.play();
+        } catch (error) {
+          console.warn(
+            "Local video play warning:",
+            error
+          );
+        }
       }
 
       setScreenSharing(false);
+
+      console.log(
+        "🛑 Screen sharing stopped"
+      );
     } catch (error) {
       console.error(
-        "Stop screen sharing error:",
+        "❌ Stop screen sharing error:",
         error
       );
     }
   };
 
-  // ==========================
+  // ============================================================
   // SCREEN SHARING
-  // ==========================
+  // ============================================================
 
   const toggleScreenShare = async () => {
     if (!peerConnection.current) {
       console.log(
-        "Peer connection not available"
+        "⚠️ Peer connection not available"
       );
       return;
     }
 
     try {
       if (!screenSharing) {
+        console.log(
+          "🖥️ Starting screen sharing..."
+        );
+
         const screenStream =
           await navigator.mediaDevices.getDisplayMedia(
             {
@@ -436,7 +783,8 @@ export default function VideoCall({ roomId }) {
             .find(
               (sender) =>
                 sender.track &&
-                sender.track.kind === "video"
+                sender.track.kind ===
+                  "video"
             );
 
         if (sender) {
@@ -448,32 +796,46 @@ export default function VideoCall({ roomId }) {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject =
             screenStream;
+
+          try {
+            await localVideoRef.current.play();
+          } catch (error) {
+            console.warn(
+              "Screen video play warning:",
+              error
+            );
+          }
         }
 
         setScreenSharing(true);
 
-        screenTrack.onended = async () => {
-          await stopScreenShare();
-        };
+        screenTrack.onended =
+          async () => {
+            await stopScreenShare();
+          };
+
+        console.log(
+          "✅ Screen sharing started"
+        );
       } else {
         await stopScreenShare();
       }
     } catch (error) {
       console.error(
-        "Screen sharing error:",
+        "❌ Screen sharing error:",
         error
       );
     }
   };
 
-  // ==========================
+  // ============================================================
   // START RECORDING
-  // ==========================
+  // ============================================================
 
   const startRecording = () => {
     if (!localStream.current) {
       console.log(
-        "No camera stream available"
+        "⚠️ No camera stream available"
       );
       return;
     }
@@ -483,7 +845,6 @@ export default function VideoCall({ roomId }) {
 
       let options = {};
 
-      // Check supported recording format
       if (
         MediaRecorder.isTypeSupported(
           "video/webm;codecs=vp9,opus"
@@ -514,9 +875,12 @@ export default function VideoCall({ roomId }) {
           options
         );
 
-      mediaRecorder.current = recorder;
+      mediaRecorder.current =
+        recorder;
 
-      recorder.ondataavailable = (event) => {
+      recorder.ondataavailable = (
+        event
+      ) => {
         if (event.data.size > 0) {
           recordedChunks.current.push(
             event.data
@@ -544,11 +908,15 @@ export default function VideoCall({ roomId }) {
         link.download =
           `watch-party-${roomId}.webm`;
 
-        document.body.appendChild(link);
+        document.body.appendChild(
+          link
+        );
 
         link.click();
 
-        document.body.removeChild(link);
+        document.body.removeChild(
+          link
+        );
 
         URL.revokeObjectURL(url);
 
@@ -557,7 +925,7 @@ export default function VideoCall({ roomId }) {
 
       recorder.onerror = (event) => {
         console.error(
-          "MediaRecorder error:",
+          "❌ MediaRecorder error:",
           event
         );
 
@@ -573,15 +941,15 @@ export default function VideoCall({ roomId }) {
       );
     } catch (error) {
       console.error(
-        "Recording error:",
+        "❌ Recording error:",
         error
       );
     }
   };
 
-  // ==========================
+  // ============================================================
   // STOP RECORDING
-  // ==========================
+  // ============================================================
 
   const stopRecording = () => {
     if (
@@ -599,16 +967,16 @@ export default function VideoCall({ roomId }) {
     }
   };
 
-  // ==========================
+  // ============================================================
   // LEAVE CALL
-  // ==========================
+  // ============================================================
 
   const leaveCall = () => {
     console.log(
       "📞 Leaving video call"
     );
 
-    // Stop recording first
+    // Stop recording
     if (
       mediaRecorder.current &&
       mediaRecorder.current.state !==
@@ -628,11 +996,16 @@ export default function VideoCall({ roomId }) {
       localStream.current = null;
     }
 
-    // Close WebRTC connection
+    // Close peer connection
     if (peerConnection.current) {
       peerConnection.current.close();
+
       peerConnection.current = null;
     }
+
+    // Clear ICE queue
+    pendingIceCandidates.current =
+      [];
 
     // Clear local video
     if (localVideoRef.current) {
@@ -658,11 +1031,15 @@ export default function VideoCall({ roomId }) {
         roomId,
       }
     );
+
+    console.log(
+      "✅ Left video call"
+    );
   };
 
-  // ==========================
+  // ============================================================
   // UI
-  // ==========================
+  // ============================================================
 
   return (
     <div className="border rounded-xl p-6 shadow bg-white mt-6">
@@ -671,13 +1048,15 @@ export default function VideoCall({ roomId }) {
         📹 Video Call
       </h2>
 
-      {/* ==========================
-            VIDEO AREA
-      ========================== */}
+      {/* ========================================================
+          VIDEO AREA
+      ======================================================== */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-        {/* LOCAL VIDEO */}
+        {/* ======================================================
+            LOCAL VIDEO
+        ====================================================== */}
 
         <div className="bg-black rounded-xl overflow-hidden aspect-video relative">
 
@@ -689,11 +1068,12 @@ export default function VideoCall({ roomId }) {
             className="w-full h-full object-cover"
           />
 
-          {!cameraOn && !screenSharing && (
-            <div className="absolute inset-0 flex items-center justify-center text-white">
-              Camera Off
-            </div>
-          )}
+          {!cameraOn &&
+            !screenSharing && (
+              <div className="absolute inset-0 flex items-center justify-center text-white">
+                Camera Off
+              </div>
+            )}
 
           <div className="absolute bottom-2 left-2 bg-black/60 text-white px-3 py-1 rounded">
             You
@@ -701,7 +1081,9 @@ export default function VideoCall({ roomId }) {
 
         </div>
 
-        {/* REMOTE VIDEO */}
+        {/* ======================================================
+            REMOTE VIDEO
+        ====================================================== */}
 
         <div className="bg-black rounded-xl overflow-hidden aspect-video relative">
 
@@ -709,6 +1091,7 @@ export default function VideoCall({ roomId }) {
             ref={remoteVideoRef}
             autoPlay
             playsInline
+            controls={false}
             className="w-full h-full object-cover"
           />
 
@@ -728,25 +1111,24 @@ export default function VideoCall({ roomId }) {
 
       </div>
 
-      {/* ==========================
-            CONTROLS
-      ========================== */}
+      {/* ========================================================
+          CONTROLS
+      ======================================================== */}
 
       <div className="flex flex-wrap gap-3 mt-5">
 
-        {!cameraOn && !localStream.current ? (
+        {/* JOIN VIDEO */}
 
+        {!cameraOn &&
+        !localStream.current ? (
           <button
             onClick={startCamera}
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg"
           >
             📹 Join Video Call
           </button>
-
         ) : (
-
           <>
-
             {/* CAMERA */}
 
             <button
@@ -772,7 +1154,9 @@ export default function VideoCall({ roomId }) {
             {/* SCREEN SHARE */}
 
             <button
-              onClick={toggleScreenShare}
+              onClick={
+                toggleScreenShare
+              }
               className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg"
             >
               {screenSharing
@@ -807,9 +1191,7 @@ export default function VideoCall({ roomId }) {
             >
               📞 Leave Call
             </button>
-
           </>
-
         )}
 
       </div>
